@@ -3,6 +3,7 @@
 	Math.toDeg = function(r) {return r/0.0174532925;}
 	function History() { return this; };
 
+	//Not sure if history is the correct term for this guy anymore...
 	History.prototype = {
 		length: 0,
 		add: function(t, m, s) {
@@ -16,18 +17,19 @@
 					return this[i];
 				}
 			}
-			return false;
+			return undefined;
+		},
+		empty: function() {
+			for(var t in this) {
+				delete this[t];
+			}
+			this.length = 0;
 		}
 	}
 
 	function easyTransform(el){
 		return new easyTransformEl(el);
 	}
-
-	//ezt(el).setRotation(20deg).setTranslation(20, 20).setScale(2);
-
-	//Add ability to save specific transforms
-	//	ideally it would be singleton style
 
 	function easyTransformEl(el) {
 		this.el = el;
@@ -36,27 +38,29 @@
 	easyTransformEl.prototype = {
 		current: [1,0,0,1,0,0],
 		hist: new History(),
+		saved: {},
 
 		stopTransform: function() {
 			this.el.style.webkitTransform = this.getLiveTransform();
 			return this;
 		},
 
+		//Rotations add
 		rotate: function(a) {
 			var last = this.hist.last('rotate'),
-				r = Math.toRad(a),
+				r = (last ? Math.acos(last.matrix[0]) + Math.toRad(a) : Math.toRad(a)),
 				m;
-
+			
 			if(r.toString().split('.')[1].length > 4) r = Math.round(r*10000)/10000
 			
 			if(last) {
-			 	m = [Math.cos(r + last.matrix[0]),Math.sin(r + last.matrix[1]),-Math.sin(r + Math.abs(last.matrix[2])),Math.cos(r + last.matrix[3]), 0, 0];
+			 	m = [Math.cos(r),Math.sin(r),-Math.sin(r),Math.cos(r), 0, 0];
 			 } else {
 				m = [Math.cos(r),Math.sin(r),-Math.sin(r),Math.cos(r), 0, 0];
 			}
 			
-			console.log(m)
 			//Check if rotation already in place...
+			if(last) this.removeTransform(last.matrix);
 			this.addTransform(m);
 
 			this.hist.add('rotate', m, 'rotate(' + a + 'deg)');
@@ -78,12 +82,14 @@
 		},
 
 		scale: function(x, y) {
+			if(!y) y = x;
 			var m = [x,0,0,y,0,0];
 
 			this.current[0] = m[0];
 			this.current[3] = m[3];
 
 			this.hist.add('scale', m, 'scale(' + m[0] + ', ' + m[3] + ')');
+			console.log(this.current);
 			this.setStyle(this.current);
 
 			return this;
@@ -102,45 +108,58 @@
 		},
 
 		transform: function(t) {
-			var t = t.match(/[a-z]+\((-?[0-9]+(deg|px)?,? ?)+\)/ig);
-			
+			var t = t.match(/([a-z]+(?=\()|-?[0-9]+(deg|px)?(?=,)? ?)+/ig);
+			console.log(t);
 			return this;
 		},
 
-		getRotation: function(live) {
-			
+		reset: function() {
+			this.current = [1,0,0,1,0,0];
+			this.hist.empty();
+			this.setStyle(this.current);
+
+			return this;
 		},
 
-		getTranslation: function(live) {
-			
+		//Since rotation affects all vectors, need to make check for rotation and deeeeeee-vide!
+		getRotation: function(end) {
+			if(end) return this.current;
+			return Math.round(Math.toDeg(Math.acos(this.getLiveMatrix()[0])));
 		},
 
-		getScale: function(live) {
-			
+		getTranslation: function(end) {
+			if(end) return this.current;
+			return [this.getLiveMatrix()[5], this.getLiveMatrix()[6]];
 		},
 
-		getSkew: function(live) {
-			
+		getScale: function(end) {
+			if(end) return this.current;
+			return [this.getLiveMatrix()[0], this.getLiveMatrix()[3]];
 		},
 
-		getTransform: function(live) {
-			
+		getSkew: function(end) {
+			if(end) return [Math.toDeg(Math.atan(this.current[1])), Math.toDeg(Math.atan(this.current[2]))];
+			return [this.getLiveMatrix()[1], this.getLiveMatrix()[2]];
 		},
 
-		getLiveTransform: function(asArray) {
-			//This is going to get tricky with multiple transforms...
-			//We can possible check the style string for hints on how to
-			//break up the current matrix accordingly...?
-			//or, keep track of each transformation made to the el
-			if(asMatrix) {
-				return window.getComputedStyle(this.el, null).webkitTransform.match(/\d/g);
-			} else {
-				window.getComputedStyle(this.el, null).webkitTransform;
-			}
+		getTransform: function(live, asMatrix) {
+			if(asMatrix) return this.current;
+			
+			var r = this.hist.last('rotate'),
+				sk = this.hist.last('skew'),
+				sc = this.hist.last('scale'),
+				t = this.hist.last('translate'),
+				transform = (r ? r.string + ' ' : '') + (sk ? sk.string + ' ' : '') + (sc ? sc.string + ' ' : '') + (t ? t.string : '');
+
+			return transform;
+		},
+
+		getLiveMatrix: function(asArray) {
+			return window.getComputedStyle(this.el, null).webkitTransform.match(/-?[\d\.]+(?=,)?/g);
 		},
 
 		addTransform: function(m) {
-			//assuming 2d for now...
+			//assuming 2d for now...yeah, yeah.
 			//Sorts array so we're in order of matrix rows, rather than vectors
 			for(var i = 1, len = 3, tmp; i < len; i++) {
 				tmp = m[i];
@@ -157,18 +176,51 @@
 				var cm = (m[0] == 0 ? nm.shift() + 1 : nm.shift()),
 					cc = (c[0] == 0 ? c.shift() + 1 : c.shift());
 				
-				v += cm*cc;
-				n.push(v);
-				v = 0;
+				//Reminder for 3d...things'll have to change :(
+				//v += cm*cc;
+				n.push(cm*cc);
+				//v = 0;
 			}
 
 			this.hist.add('transform', c, 'matrix(' + c.toString() + ')');
 			this.current = n.concat(c);
-			console.log(this.current);
+		},
+
+		removeTransform: function(m) {
+			//THIS AIN'T DRY, YO! Fix it.
+			//Instead, take the matrix and divide each point to remove...
+			for(var i = 1, len = 3, tmp; i < len; i++) {
+				tmp = m[i];
+				m[i] = m[i+1];
+				m[i+=1] = tmp;
+			}
+			
+			var c = this.current.concat([]),
+				nm = m.concat([]),
+				n = [];
+
+			while(nm.length > 2) {
+				var cm = (m[0] == 0 ? nm.shift() + 1 : nm.shift()),
+					cc = (c[0] == 0 ? c.shift() + 1 : c.shift());
+				
+				n.push(cc/cm);
+			}
+
+			this.current = n.concat(c);
 		},
 
 		setStyle: function(m) {
 			this.el.style.webkitTransform = 'matrix(' + m.toString() + ')';
+		},
+
+		save: function(name, m) {
+			if(!m) {
+				this.saved[name] = this.current;
+			} else {
+				this.save[name] = m;
+			}
+
+			return this;
 		}
 	}
 

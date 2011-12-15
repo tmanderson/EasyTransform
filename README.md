@@ -9,7 +9,7 @@ CSS transforms are easy:
 
     el.style.transform = 'rotate(20deg) translate(20px, 100px) scale(1.2)';
 
-But let's face it, after that point, it's pretty tedious to manipulate an already added transform, this is where Easy Transform comes in. To do the above example with easy transform, all we gotta do is:
+But let's face it, after that point, it's pretty tedious to manipulate an already added transform. This is where Easy Transform comes in. To do the above example with easy transform, all we gotta do is:
 
     ezt(el).rotate(20).translate(20, 100).scale(1.2);
 

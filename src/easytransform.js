@@ -45,12 +45,12 @@
 			return this;
 		},
 
-		//Rotations add
+		//TODO: Make adding of rotations and other transforms optional.
 		rotate: function(a) {
 			var last = this.hist.last('rotate'),
 				r = (last ? Math.acos(last.matrix[0]) + Math.toRad(a) : Math.toRad(a)),
 				m;
-			
+
 			if(r.toString().split('.')[1].length > 4) r = Math.round(r*10000)/10000
 			
 			if(last) {

@@ -1,9 +1,9 @@
-Easy Transform
-=
-Making transforms easier to work with since 2011
+Easy Transform v0.0001a
 -
+**Making 2D* transforms easier to work with since 2011**
+_______
 
-Easy Transform enhances the fun that is CSS3 transforms.
+######Skip to the bottom for full method listing
 
 CSS transforms are easy:
 
@@ -39,4 +39,47 @@ Every transform has a getter:
     //This will return the end transform (if not animating or transitioning)
     ezt(el).getTranslation(true);
 
+###CURRENT FUN
+    //Creates an Easy Transform element for the element
+    ezt(el);
+
+    //This will stop an animation/transition in place.
+    ezt(el).stopTransform();
+
+    //This will rotate an element 20 degrees CC -  Currently this will always add to any other rotation applied. 
+    ezt(el).rotate(20);
+
+    //This will translate an element, specified in pixels.
+    ezt(el).translate(20) //x = 20, y = 20
+    ezt(el).translate(20, 40) //x = 20, y = 40
+
+    //This will scale an element
+    ezt(el).scale(1.2) // x= 1.2, y = 1.2
+    ezt(el).skew(1.2, 1.5) //x = 1.2, y = 1.5
+
+    //This will skew an element, specified in degrees
+    ezt(el).skew(20) // x= 20, y = 20
+    ezt(el).skew(20, 40) //x = 20, y = 40
+
+    //This will add an entire transform to the element
+    ezt(el).transform('rotate(20deg) scale(1.5) translate(20px, 30px)');
+
+    //If end is true, the returned value will be the static ending transform.
+
+    ezt(el).getRotation(end);
+
+    ezt(el).getTranslation(end);
+
+    ezt(el).getScale(end);
+
+    ezt(el).getSkew(end);
+
+    //live - (boolean) Returns live transform in a readable string
+    //asMatrix - (boolean) Returns the 2d matrix of the transform
+    ezt(el).getTransform(live asMatrix);
+    
+    //asArray - (boolean) returns 2d matrix as JS array
+    ezt(el).getLiveMatrix(asArray)
+
+#####*3D once 2D solidified, shouldn't be too far off.
 *Hope you find some fun in helping out with this, or using it! Thanks!*

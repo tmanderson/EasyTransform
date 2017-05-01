@@ -52,13 +52,13 @@
 				m;
 
 			if(r.toString().split('.')[1].length > 4) r = Math.round(r*10000)/10000
-			
+
 			if(last) {
 			 	m = [Math.cos(r),Math.sin(r),-Math.sin(r),Math.cos(r), 0, 0];
 			 } else {
 				m = [Math.cos(r),Math.sin(r),-Math.sin(r),Math.cos(r), 0, 0];
 			}
-			
+
 			//Check if rotation already in place...
 			if(last) this.removeTransform(last.matrix);
 			this.addTransform(m);
@@ -97,7 +97,7 @@
 
 		skew: function(x, y) {
 			var m = [1,Math.tan(Math.toRad(y)),Math.tan(Math.toRad(x)),1,0,0];
-			
+
 			this.current[1] = m[1];
 			this.current[2] = m[2];
 
@@ -144,7 +144,7 @@
 
 		getTransform: function(live, asMatrix) {
 			if(asMatrix) return this.current;
-			
+
 			var r = this.hist.last('rotate'),
 				sk = this.hist.last('skew'),
 				sc = this.hist.last('scale'),
@@ -166,7 +166,7 @@
 				m[i] = m[i+1];
 				m[i+=1] = tmp;
 			}
-			
+
 			var c = this.current.concat([]),
 				nm = m.concat([]),
 				n = [],
@@ -175,7 +175,7 @@
 			while(nm.length > 2) {
 				var cm = (m[0] == 0 ? nm.shift() + 1 : nm.shift()),
 					cc = (c[0] == 0 ? c.shift() + 1 : c.shift());
-				
+
 				//Reminder for 3d...things'll have to change :(
 				//v += cm*cc;
 				n.push(cm*cc);
@@ -194,7 +194,7 @@
 				m[i] = m[i+1];
 				m[i+=1] = tmp;
 			}
-			
+
 			var c = this.current.concat([]),
 				nm = m.concat([]),
 				n = [];
@@ -202,7 +202,7 @@
 			while(nm.length > 2) {
 				var cm = (m[0] == 0 ? nm.shift() + 1 : nm.shift()),
 					cc = (c[0] == 0 ? c.shift() + 1 : c.shift());
-				
+
 				n.push(cc/cm);
 			}
 

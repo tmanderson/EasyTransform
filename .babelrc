@@ -1,0 +1,17 @@
+{
+  "presets": ["env", "react"],
+  "plugins": [
+    "transform-regenerator",
+    "transform-object-rest-spread",
+    "transform-async-to-generator",
+    "transform-async-to-module-method",
+    "transform-export-extensions",
+    "transform-class-properties",
+    "syntax-async-functions",
+    "add-module-exports",
+    "syntax-object-rest-spread",
+    "syntax-jsx",
+    "syntax-export-extensions",
+    "syntax-class-properties"
+  ]
+}

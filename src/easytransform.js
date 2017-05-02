@@ -1,228 +1,264 @@
-(function() {
-	Math.toRad = function(d) {return d*0.0174532925;}
-	Math.toDeg = function(r) {return r/0.0174532925;}
-	function History() { return this; };
+import CSSMatrix from './CSSMatrix';
 
-	//Not sure if history is the correct term for this guy anymore...
-	History.prototype = {
-		length: 0,
-		add: function(t, m, s) {
-			this[this.length] = {type: t, matrix: m, string: s};
-			this.length++;
-		},
-		last: function(type) {
-			var i = this.length;
-			while(i--) {
-				if(this[i].type === type) {
-					return this[i];
-				}
-			}
-			return undefined;
-		},
-		empty: function() {
-			for(var t in this) {
-				delete this[t];
-			}
-			this.length = 0;
-		}
-	}
+let last = Array.prototype.last;
+Array.prototype.last = function() {
+  if(last) return last.apply(this);
+  return this[this.length-1];
+};
 
-	function easyTransform(el){
-		return new easyTransformEl(el);
-	}
+export default class EasyTransform {
+  static instances = [];
 
-	function easyTransformEl(el) {
-		this.el = el;
-	}
+  static run() {
+    const els = document.querySelectorAll('[data-ezt]:not([data-ezt-enabled])');
+    Array.from(els).map(el => el._ezt = new EasyTransform(el));
+  }
 
-	easyTransformEl.prototype = {
-		current: [1,0,0,1,0,0],
-		hist: new History(),
-		saved: {},
+  _mat = null;
+  _dir = 1;
+  _loop = false;
+  _offset = null;
+  _delay = 0;
+  _easing = 'linear';
+  _duration = '500ms';
 
-		stopTransform: function() {
-			this.el.style.webkitTransform = this.getLiveTransform();
-			return this;
-		},
+  constructor(el) {
+    this.playing = false;
 
-		//TODO: Make adding of rotations and other transforms optional.
-		rotate: function(a) {
-			var last = this.hist.last('rotate'),
-				r = (last ? Math.acos(last.matrix[0]) + Math.toRad(a) : Math.toRad(a)),
-				m;
+    this.el = el;
 
-			if(r.toString().split('.')[1].length > 4) r = Math.round(r*10000)/10000
+    this._mat = new CSSMatrix();
+    this._offset = [el.offsetWidth/2, el.offsetHeight/2];
+    this._delay = el.hasAttribute('data-ezt-delay') && el.hasAttribute('data-ezt-delay');
+    this._loop = el.hasAttribute('data-ezt-loop');
+    this._alternate = el.hasAttribute('data-ezt-alternate');
 
-			if(last) {
-			 	m = [Math.cos(r),Math.sin(r),-Math.sin(r),Math.cos(r), 0, 0];
-			 } else {
-				m = [Math.cos(r),Math.sin(r),-Math.sin(r),Math.cos(r), 0, 0];
-			}
+    this.easing(el.getAttribute('data-ezt-duration'));
+    this.duration(el.getAttribute('data-ezt-easing'));
 
-			//Check if rotation already in place...
-			if(last) this.removeTransform(last.matrix);
-			this.addTransform(m);
+    this.frame = 0;
+    // first frame is the element as-styled
+    this.frames = [ () => this.reset(true) ];
 
-			this.hist.add('rotate', m, 'rotate(' + a + 'deg)');
-			this.setStyle(this.current);
+    this.reset();
 
-			return this;
-		},
+    this.play = this.play.bind(this);
+    this.next = this.next.bind(this);
+    this.reset = this.reset.bind(this);
 
-		translate: function(x, y) {
-			var m = [1,0,0,1,x,y];
+    this.el.addEventListener('transitionend', this.next);
+    EasyTransform.instances.push(this);
 
-			this.current[4] = x;
-			this.current[5] = y;
+    if(el.dataset.ezt && el.dataset.ezt.length) {
+      // parse `data-ezt` argument for any defined frames
+      const frames = el.dataset.ezt.split('')
+        .reduce(({ active, frames }, char, i, arr) => {
+          switch(char) {
+            case '\n':
+            case '\r':
+            case '\r\n':
+            case ' ': break;
+            case ',': // Adding another argument if there's an active frame
+              if(frames.last()[active]) frames.last()[active].push('');
+              else frames.push({});
+            break;
+            case '(': // start accumulating args for this transform
+              Object.assign(frames.last(), { [active]: [''] });
+            break;
+            case ')': // stop accumulating args for this transform
+              active = '';
+            break;
+            default: // if `active` is in the current frame, accumulate arg value
+              if(frames.last()[active]) {
+                frames.last()[active][frames.last()[active].length - 1] += char;
+              }
+              else {
+                active += char;
+              }
+          }
 
-			this.hist.add('translate', m.toString(), 'translate(' + x + 'px, ' + y + 'px)');
-			this.setStyle(this.current);
+          return i === arr.length - 1 ? frames : { active, frames };
+        }, { active: '', frames: [ {} ] });
 
-			return this;
-		},
+      if(frames.length) frames.forEach(frame => this.transform(frame));
+      if(el.hasAttribute('data-ezt-autoplay')) this.start();
+    }
+  }
 
-		scale: function(x, y) {
-			if(!y) y = x;
-			var m = [x,0,0,y,0,0];
+  start() {
+    this.playing = true;
+    setTimeout(this.play, 100);
+  }
 
-			this.current[0] = m[0];
-			this.current[3] = m[3];
+  next() {
+    this.frame += this._dir;
+    const end = (this.frame < 0 || this.frame >= this.frames.length);
 
-			this.hist.add('scale', m, 'scale(' + m[0] + ', ' + m[3] + ')');
-			console.log(this.current);
-			this.setStyle(this.current);
+    if(!this._loop && end) return;
 
-			return this;
-		},
+    if(end && this._alternate) {
+      this._dir *= -1;
+      this.frame += this._dir;
+    }
+    else if(end) {
+      return this.reset(true);
+    }
 
-		skew: function(x, y) {
-			var m = [1,Math.tan(Math.toRad(y)),Math.tan(Math.toRad(x)),1,0,0];
+    this.play();
+  }
 
-			this.current[1] = m[1];
-			this.current[2] = m[2];
+  stop() {
+    this.playing = false;
+  }
 
-			this.hist.add('skew', m, 'skew(' + x + 'deg, ' + y + 'deg)');
-			this.setStyle(this.current);
+  play() {
+    if(this.playing && this.frame >= 0 && this.frame < this.frames.length) {
+      const current = this._mat.toCSS();
+      const frame = this.frames[this.frame].call(this);
 
-			return this;
-		},
+      if(frame instanceof Promise) {
+        return frame.then(() => {
+          if(current === this._mat.toCSS()) return this.next();
+          this.el.style.transform = this._mat.toCSS();
+        });
+      }
+      else if(current !== this._mat.toCSS()) {
+        this.el.style.transform = this._mat.toCSS();
+      }
+      else {
+        this.next();
+      }
+    }
 
-		transform: function(t) {
-			var t = t.match(/([a-z]+(?=\()|-?[0-9]+(deg|px)?(?=,)? ?)+/ig);
-			console.log(t);
-			return this;
-		},
+    return this;
+  }
 
-		reset: function() {
-			this.current = [1,0,0,1,0,0];
-			this.hist.empty();
-			this.setStyle(this.current);
+  addFrame(frame) {
+    this.frames.push(frame);
+    return this;
+  }
 
-			return this;
-		},
+  easing(easing) {
+    if(!easing) return this;
+    this._easing = easing;
+    this.el.style.transition = `transform ${this._duration} ${this._easing}`;
+    return this;
+  }
 
-		//Since rotation affects all vectors, need to make check for rotation and deeeeeee-vide!
-		getRotation: function(end) {
-			if(end) return this.current;
-			return Math.round(Math.toDeg(Math.acos(this.getLiveMatrix()[0])));
-		},
+  duration(duration) {
+    if(!duration) return this;
 
-		getTranslation: function(end) {
-			if(end) return this.current;
-			return [this.getLiveMatrix()[5], this.getLiveMatrix()[6]];
-		},
+    this._duration = typeof duration === 'number' ?
+      duration = `${duration}ms` :
+      duration;
 
-		getScale: function(end) {
-			if(end) return this.current;
-			return [this.getLiveMatrix()[0], this.getLiveMatrix()[3]];
-		},
+    this.el.style.transition = `transform ${this._duration} ${this._easing}`;
+    return this;
+  }
 
-		getSkew: function(end) {
-			if(end) return [Math.toDeg(Math.atan(this.current[1])), Math.toDeg(Math.atan(this.current[2]))];
-			return [this.getLiveMatrix()[1], this.getLiveMatrix()[2]];
-		},
+  alternate() {
+    this._alternate = !this._alternate;
+    return this;
+  }
 
-		getTransform: function(live, asMatrix) {
-			if(asMatrix) return this.current;
+  loop() {
+    this._loop = !this._loop;
+    return this;
+  }
 
-			var r = this.hist.last('rotate'),
-				sk = this.hist.last('skew'),
-				sc = this.hist.last('scale'),
-				t = this.hist.last('translate'),
-				transform = (r ? r.string + ' ' : '') + (sk ? sk.string + ' ' : '') + (sc ? sc.string + ' ' : '') + (t ? t.string : '');
+  wait(t) {
+    return this.addFrame(() => {
+      return new Promise(resolve => setTimeout(resolve, t))
+    });
+  }
 
-			return transform;
-		},
+  scale(x=1, y, z) {
+    return this.transform({ scale: [ x, y, z ] });
+  }
 
-		getLiveMatrix: function(asArray) {
-			return window.getComputedStyle(this.el, null).webkitTransform.match(/-?[\d\.]+(?=,)?/g);
-		},
+  skew(x=0, y=0) {
+    return this.transform({ skew: [x, y] });
+  }
 
-		addTransform: function(m) {
-			//assuming 2d for now...yeah, yeah.
-			//Sorts array so we're in order of matrix rows, rather than vectors
-			for(var i = 1, len = 3, tmp; i < len; i++) {
-				tmp = m[i];
-				m[i] = m[i+1];
-				m[i+=1] = tmp;
-			}
+  translate(x=0, y=0, z=0, add=true) {
+    if(arguments.length === 0) {
+      add = false;
+      z = x = y = 0;
+    }
 
-			var c = this.current.concat([]),
-				nm = m.concat([]),
-				n = [],
-				v = 0;
+    return this.transform({ translate: [x, y, z, add] });
+  }
 
-			while(nm.length > 2) {
-				var cm = (m[0] == 0 ? nm.shift() + 1 : nm.shift()),
-					cc = (c[0] == 0 ? c.shift() + 1 : c.shift());
+  rotate(z=0, x=0, y=0, add=true) { // assuming z is default with one arg
+    if(arguments.length === 0) {
+      add = false;
+      z = x = y = 0;
+    }
 
-				//Reminder for 3d...things'll have to change :(
-				//v += cm*cc;
-				n.push(cm*cc);
-				//v = 0;
-			}
+    return this.transform({ rotate: [ z, x, y, add ] });
+  }
 
-			this.hist.add('transform', c, 'matrix(' + c.toString() + ')');
-			this.current = n.concat(c);
-		},
+  call(fn) {
+    this.addFrame(() => new Promise((resolve, reject) => {
+      try {
+        return resolve(fn.call(this))
+      }
+      catch(e) { return reject(e) };
+    }));
 
-		removeTransform: function(m) {
-			//THIS AIN'T DRY, YO! Fix it.
-			//Instead, take the matrix and divide each point to remove...
-			for(var i = 1, len = 3, tmp; i < len; i++) {
-				tmp = m[i];
-				m[i] = m[i+1];
-				m[i+=1] = tmp;
-			}
+    return this;
+  }
 
-			var c = this.current.concat([]),
-				nm = m.concat([]),
-				n = [];
+  reset(apply=false) {
+    const self = this;
 
-			while(nm.length > 2) {
-				var cm = (m[0] == 0 ? nm.shift() + 1 : nm.shift()),
-					cc = (c[0] == 0 ? c.shift() + 1 : c.shift());
+    this.frame = 0;
+    this._skew = [0, 0];
+    this._rotation = [0, 0, 0]; // z, x, y
+    this._translation = [0, 0, 0];
 
-				n.push(cc/cm);
-			}
+    this._mat.reset();
+    if(apply) this.el.style.transform = this._mat.toCSS();
+  }
 
-			this.current = n.concat(c);
-		},
+  transform(transforms) {
+    if(!Object.keys(transforms).length) return this;
 
-		setStyle: function(m) {
-			this.el.style.webkitTransform = 'matrix(' + m.toString() + ')';
-		},
+    return this.addFrame(() => {
+      Object.keys(transforms).forEach(prop => {
+        const transform = [].concat(transforms[prop]);
 
-		save: function(name, m) {
-			if(!m) {
-				this.saved[name] = this.current;
-			} else {
-				this.save[name] = m;
-			}
+        switch(prop) {
+          case "rotate":
+            let [ z=0, x=0, y=0, add=true ] = transform;
+            this._rotation = [ z, x, y ].map((a, i) => (add ? this._rotation[i] : 0) + a  * this._dir);
+            this._mat.rotate(...this._rotation.map(a => (a*Math.PI)/180));
+          break;
+          case "translate":
+            this._translation = transform.slice(0, 3).map((v, i, translation) => {
+              if(translation[3]) return this._translation[i] + this._offset[i] + v * this._dir;
+              return this._offset[i] + v * this._dir
+            });
+            this._mat.translate(...this._translation);
+          break;
+          case "skew":
+            this._skew = transform;
+            this._mat.skew(...transform.map(v => (v*Math.PI)/180 * this._dir));
+          default:
+            this._mat[prop] ?
+              this._mat[prop](...transform) :
+              this[prop](...transform);
+        }
+      });
+    });
+  }
 
-			return this;
-		}
-	}
-
-	window.ezt = easyTransform;
-})();
+  getTransform() {
+    return {
+      origin: this._offset,
+      translation: this._translation,
+      rotation: this._rotation,
+      skew: this._skew
+    };
+  }
+}

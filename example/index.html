@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Easy Transform</title>
+  <script src="../dist/easytransform.js"></script>
+  <style>
+    html, body {
+      height:  100vh;
+      padding:  0;
+      margin:  0;
+      width:  100vw;
+    }
+
+    body {
+      align-items:  center;
+      display:  flex;
+      justify-content: space-around;
+      flex-direction:  column;
+    }
+
+    div {
+      background-color: orange;
+      height:  100px;
+      width:  100px;
+    }
+  </style>
+</head>
+<body>
+  <div></div>
+  <div
+    data-ezt-loop
+    data-ezt-alternate
+    data-ezt-autostart
+    data-ezt="
+      duration(1s),
+      rotate(80) scale(2, 2),
+      wait(500),
+      duration(100ms),
+      rotate(-45)
+      scale(1),
+    "></div>
+
+  <script>
+    EZT.run();
+
+    const t = new EZT(document.querySelector('div'));
+
+    t.loop()
+      .duration(100)
+      .rotate(25)
+      .wait(500)
+      .duration(500)
+      .skew(20)
+      .wait(500)
+      .duration(1000)
+      .transform({
+        rotate: 45,
+        translate: [50, 50]
+      })
+      .call(function() { console.log('AT THE END!') })
+      .start();
+  </script>
+</body>
+</html>

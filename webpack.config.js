@@ -1,13 +1,14 @@
 const path = require('path');
 const fs = require('fs');
 const webpack = require('webpack');
-var WatchIgnorePlugin = require('watch-ignore-webpack-plugin')
 
 const babelrc = JSON.parse(fs.readFileSync('./.babelrc'));
 
+const PRODUCTION_BUILD = /^prod/i.test(process.env.NODE_ENV);
+
 module.exports = {
   target: 'web',
-  devtool: 'eval',
+  devtool: PRODUCTION_BUILD ? 'nosources-source-map' : 'cheap-module-eval-source-map',
 
   context: __dirname,
   entry: './src/index.js',
@@ -18,7 +19,9 @@ module.exports = {
   },
 
   output: {
-    filename: 'bundle.js',
+    filename: 'easytransform.js',
+    library: 'EZT',
+    libraryTarget: 'window',
     path: path.resolve(__dirname, 'dist'),
   },
 
@@ -64,9 +67,22 @@ module.exports = {
       },
     ]
   },
-  plugins: [
-    new webpack.DefinePlugin({
-      '__DEV__': true,
-    }),
-  ],
+  plugins:
+    PRODUCTION_BUILD ? [
+      new webpack.LoaderOptionsPlugin({
+        minimize: true,
+        debug: false
+      }),
+      new webpack.optimize.UglifyJsPlugin({
+        beautify: false,
+        mangle: {
+          screw_ie8: true,
+          keep_fnames: true
+        },
+        compress: {
+          screw_ie8: true
+        },
+        comments: false
+      })
+    ] : [],
 };

@@ -4,3 +4,8 @@ export const TIMING_FUNCTIONS = {
   EASE_IN_EXPO: 'cubic-bezier(0.6, 0, 1, 1)',
   EASE_OUT_EXPO: 'cubic-bezier(0, 0, 0.6, 1)',
 };
+
+export const ANIMATION_PROPERTIES = {
+  'animation-fill-mode': ['normal', 'alternate', 'reverse', 'alternate-reverse'],
+  'animation-direction': ['normal', 'alternate', 'reverse', 'alternate-reverse'],
+};

@@ -1,85 +1,197 @@
-Easy Transform v0.0000000000000000001a
--
-**Making 2D* transforms easier to work with since 2011**
-_______
+# Easy Transform v0.9.0
 
-######Skip to the bottom for full method listing
+Easy Transform allows animation-like capabilities on HTML elements
+through the power of [CSS transitions](https://developer.mozilla.org/en-US/docs/Web/CSS/transition).
 
-CSS transforms are easy:
+What does "animation-like" mean? Internally, EZT uses transition events to
+advance frames from one transform to another. Doing this, certain transitions
+can acquire an near-animation (keyframed) appearance.
 
-    el.style.transform = 'rotate(20deg) translate(20px, 100px) scale(1.2)';
+Both 2D and 3D CSS transforms can be used with EZT.
 
-But let's face it, after that point, it's pretty tedious to manipulate an already added transform. This is where Easy Transform comes in. To do the above example with easy transform, all we gotta do is:
+EZT provides interfaces through JavaScript and HTML `dataset`s.
 
-    ezt(el).rotate(20).translate(20, 100).scale(1.2);
+View the [API documentation below](#api) or checkout the [examples](examples/index.html).
 
-Better yet, I can add right on to this transform without having to parse any silly transform strings. So, if I want to later rotate this element to 45 degrees all I gotta do is:
+#### HTML Example
+```html
+<div
+  data-ezt-loop
+  data-ezt-alternate
+  data-ezt-autostart
+  data-ezt="
+    duration(1s),
+    rotate(80) scale(2, 2), // frame 1, duration = 1s
+    wait(500),              // frame 2, duration = 500
+    duration(100ms),
+    rotate(-45)             // frame 3, duration = 100ms
+    scale(1),               // frame 4 duration = 100ms
+  "
+>
+</div>
+```
 
-    ezt(el).rotate(25);
+#### JS Example
+```javascript
+  const t = new EZT(document.querySelector('div'));
 
-Don't want to add on to the rotation*? That's fine:
+  t.loop()
+    .duration(100)
+    .rotate(25)
+    .wait(500)
+    .duration(500)
+    .skew(20)
+    .wait(500)
+    .duration(1000)
+    .transform({
+      rotate: 45,
+      translate: [50, 50]
+    })
+    .call(function() { console.log('AT THE END!') })
+    .start();
+```
 
-    ezt(el).reset().rotate(25);
+## API
 
-**currently reset will reset the whole transform, this will not be the case in the future. I'm sure I'll add it soon.*
+### HTML Attributes
+#### `data-ezt-loop` (boolean attribute)
+Loop the animation sequence
 
-I'd say that my personal favorite is being able to get transform data **LIVE**. That means you can be running a CSS transition/animation that is rotating an el, and during that transition the following:
+#### `data-ezt-alternate` (boolean attribute)
+Alternate the animation (once the end is reached, play back to the beginning)
 
-    ezt(el).getRotation();
+#### `data-ezt-autostart` (boolean attribute)
+Auto play the sequence
 
-will give back the current rotation of the element, not the ending position. Oh yeah, it gives it back to you as a simple int which is the rotation in degrees.
+#### `data-ezt="transform, transform..."`
+Each `transform` within the value is a non-prefixed method invocation.
 
-Every transform has a getter:
+**NOTE**: Commas (outside of argument lists, of course) delimit animation frames.
+The newlines in the example above are just for clarity. Whitespace is ignored.
 
-    ezt(el).getTranslation();
-    ezt(el).getSkew();
-    ezt(el).getScale();
-    ezt(el).getTransform();
+**example**
+```
+data-ezt="
+  duration(100),            // set the frame duration to 100ms
+  rotate(-20) scale(2),     // rotate the element -20 degrees and scale by 2 (over 100ms)
+  duration(1000),           // set the frame duration to 1s
+  rotate(45) skew(10),      // rotate 45 degrees and skew the x-axis by 10 degrees (over 1s)
+  wait(500)                 // wait 500ms
+  rotate()                  // rotate back to 0, 0
+"
+```
 
-    //This will return the end transform (if not animating or transitioning)
-    ezt(el).getTranslation(true);
+### Static methods
 
-###CURRENT FUN
-    //Creates an Easy Transform element for the element
-    ezt(el);
+#### `EZT.run`
+Finds all `data-ezt` elements on the page and creates their `EZT` instances.
 
-    //This will stop an animation/transition in place.
-    ezt(el).stopTransform();
+### Instance methods
 
-    //This will rotate an element 20 degrees CC -  Currently this will always add to any other rotation applied. 
-    ezt(el).rotate(20);
+#### `EZT(HTMLElement) => EZTInstance`
+Create an EZT instance on the given `HTMLElement`.
 
-    //This will translate an element, specified in pixels.
-    ezt(el).translate(20) //x = 20, y = 20
-    ezt(el).translate(20, 40) //x = 20, y = 40
+#### `loop() => EZTInstance`
+Toggle animation looping
 
-    //This will scale an element
-    ezt(el).scale(1.2) // x= 1.2, y = 1.2
-    ezt(el).skew(1.2, 1.5) //x = 1.2, y = 1.5
+#### `alternate() => EZTInstance`
+Toggle alternation of the animations direction (only applies to `loop`d animations)
 
-    //This will skew an element, specified in degrees
-    ezt(el).skew(20) // x= 20, y = 20
-    ezt(el).skew(20, 40) //x = 20, y = 40
+#### `duration(`[CSSDuration](https://developer.mozilla.org/en-US/docs/Web/CSS/transition-duration)`) => EZTInstance`
+Set the duration for the following transforms
 
-    //This will add an entire transform to the element
-    ezt(el).transform('rotate(20deg) scale(1.5) translate(20px, 30px)');
+**example**
+```javascript
+EZT(document.querySelector('div'))
+  .duration(500)
+  .scale(2) // this scale will take 500 ms
+  .duration(1000)
+  .scale(1) // this scale (down) will take 1s
+  .duration('2s')
+  .translate(100, 100) // this translation will take 2s
+```
 
-    //If end is true, the returned value will be the static ending transform.
+#### `easing(`[CSSTransitionTimingFunction](https://developer.mozilla.org/en-US/docs/Web/CSS/transition-timing-function)`) => EZTInstance`
+Set the easing for the following transforms
 
-    ezt(el).getRotation(end);
+**example**
+```javascript
+EZT(document.querySelector('div'))
+  .easing('linear')
+  .scale(2) // this scale will have linear easing
+  .easing('east-out')
+  .scale(1) // this scale (down) will have `ease-in` easing
+  .easing('ease-in-out')
+  .translate(100, 100) // this translation will have `ease-in-out` easing
+```
 
-    ezt(el).getTranslation(end);
+#### `rotate() => EZTInstance`
+No arguments will reset the rotation.
 
-    ezt(el).getScale(end);
+#### `rotate(z=0, x=0, y=0, add=true) => EZTInstance`
+Rotate the element around a given set of axes (in degrees)
 
-    ezt(el).getSkew(end);
+#### `scale(x=1, y=x, z=y) => EZTInstance`
+Scale the element. With only one argument, the elements proportions are held.
 
-    //live - (boolean) Returns live transform in a readable string
-    //asMatrix - (boolean) Returns the 2d matrix of the transform
-    ezt(el).getTransform(live asMatrix);
-    
-    //asArray - (boolean) returns 2d matrix as JS array
-    ezt(el).getLiveMatrix(asArray)
+#### `skew(x=0, y=0) => EZTInstance`
+Skew the element.
 
-#####*3D once 2D solidified, shouldn't be too far off.
-*Hope you find some fun in helping out with this, or using it! Thanks!*
+#### `translate(x=0, y=0, z=0, add=true) => EZTInstance`
+Translate (move) the element.
+
+#### `transform({ ...transforms }) => EZTInstance`
+To set multiple properties at once, the `transform` method can be used.
+
+**example**
+```javascript
+EZT(document.querySelector('div'))
+  .loop()
+  .duration(500)
+  .transform({   // Simultaneously rotate and scale over 500ms
+    rotate: 45,
+    scale: 2
+  })
+  .duration(1000)
+  .transform({   // Simultaneously rotate and scale over 1s
+    rotate: -45,
+    scale: 0.2
+  })
+```
+
+#### `EZTInstance.wait(t) => EZTInstance`
+Wait `t` milliseconds before advancing to the next transform.
+
+**example**
+```javascript
+EZT(document.querySelector('div'))
+  .loop()
+  .duration(1000)
+  .transform({   // Simultaneously rotate and scale over 500ms
+    rotate: 45,
+    scale: 2
+  })
+  .wait(500)
+  .scale(2) // scale 2x after 500ms
+```
+
+#### `EZTInstance.call(fn) => EZTInstance`
+Call the function `fn`.
+
+**example**
+```javascript
+EZT(document.querySelector('div'))
+  .loop()
+  .duration(1000)
+  .transform({   // Simultaneously rotate and scale over 500ms
+    rotate: 45,
+    scale: 2
+  })
+  .call(() => console.log('DONE!')); // function called after 1s
+```
+
+#### `EZTInstance.reset() => EZTInstance`
+Reset the instance to its original appearance.
+
+#### `EZTInstance.start() => EZTInstance`
+Start the animation sequence.

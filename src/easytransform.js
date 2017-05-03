@@ -1,3 +1,4 @@
+import { EVENT_ATTRIBUTES } from './constants';
 import CSSMatrix from './CSSMatrix';
 
 let last = Array.prototype.last;
@@ -11,7 +12,11 @@ export default class EasyTransform {
 
   static run() {
     const els = document.querySelectorAll('[data-ezt]:not([data-ezt-enabled])');
-    Array.from(els).map(el => el._ezt = new EasyTransform(el));
+
+    Array.from(els).map(el => {
+      el._ezt = new EasyTransform(el)
+      el.dataset.eztEnabled = true;
+    });
   }
 
   _mat = null;
@@ -36,63 +41,81 @@ export default class EasyTransform {
     this.easing(el.getAttribute('data-ezt-duration'));
     this.duration(el.getAttribute('data-ezt-easing'));
 
-    this.frame = 0;
-    // first frame is the element as-styled
-    this.frames = [ () => this.reset(true) ];
-
-    this.reset();
-
     this.play = this.play.bind(this);
     this.next = this.next.bind(this);
     this.reset = this.reset.bind(this);
 
+    this.frame = 0;
+    this.group = 'default';
+    // first frame is the element as-styled
+    this.frames = {};
+
+    this.reset();
+
     this.el.addEventListener('transitionend', this.next);
     EasyTransform.instances.push(this);
 
-    if(el.dataset.ezt && el.dataset.ezt.length) {
-      // parse `data-ezt` argument for any defined frames
-      const frames = el.dataset.ezt.split('')
-        .reduce(({ active, frames }, char, i, arr) => {
-          switch(char) {
-            case '\n':
-            case '\r':
-            case '\r\n':
-            case ' ': break;
-            case ',': // Adding another argument if there's an active frame
-              if(frames.last()[active]) frames.last()[active].push('');
-              else frames.push({});
-            break;
-            case '(': // start accumulating args for this transform
-              Object.assign(frames.last(), { [active]: [''] });
-            break;
-            case ')': // stop accumulating args for this transform
-              active = '';
-            break;
-            default: // if `active` is in the current frame, accumulate arg value
-              if(frames.last()[active]) {
-                frames.last()[active][frames.last()[active].length - 1] += char;
-              }
-              else {
-                active += char;
-              }
-          }
+    Object.keys(EVENT_ATTRIBUTES)
+      .map(k => el.dataset[k] && [el.dataset[k], EVENT_ATTRIBUTES[k]])
+      .filter(v => !!(v && v[0]))
+      .forEach(([ transforms, event ]) => {
+        console.log(event, transforms);
+        // parse `data-ezt` argument for any defined frames
+        const frames = transforms.split('')
+          .reduce(({ active, frames }, char, i, arr) => {
+            switch(char) {
+              case '\n':
+              case '\r':
+              case '\r\n':
+              case ' ': break;
+              case ',': // Adding another argument if there's an active frame
+                if(frames.last()[active]) frames.last()[active].push('');
+                else frames.push({});
+              break;
+              case '(': // start accumulating args for this transform
+                Object.assign(frames.last(), { [active]: [''] });
+              break;
+              case ')': // stop accumulating args for this transform
+                active = '';
+              break;
+              default: // if `active` is in the current frame, accumulate arg value
+                if(frames.last()[active]) {
+                  frames.last()[active][frames.last()[active].length - 1] += char;
+                }
+                else {
+                  active += char;
+                }
+            }
 
-          return i === arr.length - 1 ? frames : { active, frames };
-        }, { active: '', frames: [ {} ] });
+            return i === arr.length - 1 ? frames : { active, frames };
+          }, { active: '', frames: [ {} ] });
 
-      if(frames.length) frames.forEach(frame => this.transform(frame));
-      if(el.hasAttribute('data-ezt-autoplay')) this.start();
+          if (frames.length) frames.forEach(frame => this.transform(frame, event));
+      });
+
+    if(this.el.hasAttribute('data-ezt-auto-start')) {
+      this.start(this.el.dataset.eztAutoStart || 'default');
     }
+
+    Object.keys(this.frames).forEach(event => {
+      this.el.addEventListener(event, this.start.bind(this, event));
+    });
   }
 
-  start() {
+  start(group='default') {
+    if(!this.frames[group]) return this;
+    if(this.playing) return this.stop();
+
+    this.group = group;
     this.playing = true;
+    this.frame = 0;
+
     setTimeout(this.play, 100);
   }
 
   next() {
     this.frame += this._dir;
-    const end = (this.frame < 0 || this.frame >= this.frames.length);
+    const end = (this.frame < 0 || this.frame >= this.frames[this.group].length);
 
     if(!this._loop && end) return;
 
@@ -109,12 +132,19 @@ export default class EasyTransform {
 
   stop() {
     this.playing = false;
+    this.reset();
+
+    setTimeout(() => {
+      this.el.style.transform = getComputedStyle(this.el, null).transform;
+    }, 10);
+
+    return this;
   }
 
   play() {
-    if(this.playing && this.frame >= 0 && this.frame < this.frames.length) {
+    if(this.playing && this.frame >= 0 && this.frame < this.frames[this.group].length) {
       const current = this._mat.toCSS();
-      const frame = this.frames[this.frame].call(this);
+      const frame = this.frames[this.group][this.frame].call(this);
 
       if(frame instanceof Promise) {
         return frame.then(() => {
@@ -133,8 +163,12 @@ export default class EasyTransform {
     return this;
   }
 
-  addFrame(frame) {
-    this.frames.push(frame);
+  addFrame(frame, group='default') {
+    if(!this.frames[group]) {
+      this.frames[group] = [ () => this.reset(true) ];
+    }
+
+    this.frames[group].push(frame);
     return this;
   }
 
@@ -210,8 +244,6 @@ export default class EasyTransform {
   }
 
   reset(apply=false) {
-    const self = this;
-
     this.frame = 0;
     this._skew = [0, 0];
     this._rotation = [0, 0, 0]; // z, x, y
@@ -221,7 +253,7 @@ export default class EasyTransform {
     if(apply) this.el.style.transform = this._mat.toCSS();
   }
 
-  transform(transforms) {
+  transform(transforms, frameGroup='default') {
     if(!Object.keys(transforms).length) return this;
 
     return this.addFrame(() => {
@@ -250,7 +282,7 @@ export default class EasyTransform {
               this[prop](...transform);
         }
       });
-    });
+    }, frameGroup);
   }
 
   getTransform() {

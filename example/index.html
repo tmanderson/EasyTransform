@@ -28,16 +28,24 @@
 <body>
   <div></div>
   <div
-    data-ezt-loop
     data-ezt-alternate
-    data-ezt-autostart
-    data-ezt="
+    data-ezt-auto-start
+    data-ezt
+    data-ezt-hover="
+      duration(50ms),
+      scale(2),
+      duration(120ms),
+      scale(0.9),
+      duration(180ms),
+      scale(1.8)
+    "
+    data-ezt-click="
       duration(1s),
       rotate(80) scale(2, 2),
       wait(500),
       duration(100ms),
       rotate(-45)
-      scale(1),
+      scale(1)
     "></div>
 
   <script>

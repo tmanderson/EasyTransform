@@ -7,40 +7,46 @@ Array.prototype.last = function() {
 };
 
 const newFrame = () => ({
-  skew: [0, 0],
-  scale: [1, 1, 1],
-  translate: [0, 0, 0],
-  rotate: [0, 0, 0]
+  skew: [''],
+  scale: [''],
+  translate: [''],
+  rotate: [''],
+  duration: [''],
+  easing: [''],
+  wait: [''],
 });
 
 export default string => string.split('')
-  .reduce(({ active, frames }, char, i, arr) => {
+  .reduce(({ arg, active, frames }, char, i, arr) => {
     switch(char) {
       case '\n':       // ignore all whitespace  |
       case '\r':       // ignore all whitespace  |
       case '\r\n':     // ignore all whitespace \ /
       case ' ': break; // ignore all whitespace  ˅
       case ',': // Adding another argument if there's an active frame
-        if(frames.last()[active]) {
-          frames.last()[active] = [parseFloat(frames.last()[active]) || frames.last()[active]];
-          frames.last()[active].push('');
+        if(frames.last()[active] && frames.last()[active][arg]) {
+          frames.last()[active][arg] = parseFloat(frames.last()[active][arg])
+          arg += 1;
         }
         else frames.push(newFrame());
       break;
       case '(': // start accumulating args for this transform
-        Object.assign(frames.last(), { [active]: [''] });
       break;
       case ')': // stop accumulating args for this transform
+        Object.keys(frames.last())
+          .forEach(k => {
+            const last = frames.last()[k];
+            frames.last()[k] = /^(d|e|w)/.test(k)
+              ? last[0]
+              : last.map(v => v ? parseFloat(v) : 0)
+          });
         active = '';
+        arg = 0;
       break;
       default: // if `active` is in the current frame, accumulate arg value
-        if(frames.last()[active]) {
-          frames.last()[active][frames.last()[active].length - 1] += char;
-        }
-        else {
-          active += char;
-        }
+        if(frames.last()[active]) frames.last()[active][arg] += char;
+        else active += char;
     }
 
-    return i === arr.length - 1 ? frames : { active, frames };
-  }, { active: '', frames: [ newFrame() ] });
+    return i === arr.length - 1 ? frames : { arg, active, frames };
+  }, { arg: 0, active: '', frames: [ newFrame() ] });

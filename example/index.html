@@ -28,45 +28,41 @@
 <body>
   <div></div>
   <div
-    data-ezt-alternate
-    data-ezt-auto-start
     data-ezt
+    data-ezt-repeat
+    data-ezt-alternate
     data-ezt-hover="
-      duration(50ms),
+      duration(200ms),
       scale(2),
-      duration(120ms),
-      scale(0.9),
-      duration(180ms),
-      scale(1.8)
-    "
-    data-ezt-click="
-      duration(1s),
-      rotate(80) scale(2, 2),
-      wait(500),
       duration(100ms),
-      rotate(-45)
-      scale(1)
-    "></div>
+      scale(-2.20),
+      scale(0.5),
+      scale(-0.20),
+      duration(50ms),
+      scale(0.20),
+      wait(2000ms)
+    "
+  ></div>
 
   <script>
     EZT.run();
 
-    const t = new EZT(document.querySelector('div'));
+    // const t = new EZT(document.querySelector('div'));
 
-    t.loop()
-      .duration(100)
-      .rotate(25)
-      .wait(500)
-      .duration(500)
-      .skew(20)
-      .wait(500)
-      .duration(1000)
-      .transform({
-        rotate: 45,
-        translate: [50, 50]
-      })
-      .call(function() { console.log('AT THE END!') })
-      .start();
+    // t.loop()
+    //   .duration(100)
+    //   .rotate(25)
+    //   .wait(500)
+    //   .duration(500)
+    //   .skew(20)
+    //   .wait(500)
+    //   .duration(1000)
+    //   .transform({
+    //     rotate: 45,
+    //     translate: [50, 50]
+    //   })
+    //   .call(function() { console.log('AT THE END!') })
+    //   .start();
   </script>
 </body>
 </html>

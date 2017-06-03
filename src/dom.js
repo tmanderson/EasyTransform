@@ -11,6 +11,10 @@ export default {
     el.setAttribute(name, val);
   },
 
+  css(el, styles) {
+    Object.keys(styles).forEach(k => el.style[k] = styles[k]);
+  },
+
   on(el, name, listener) {
     el.addEventListener(name, listener);
   },

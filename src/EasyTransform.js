@@ -1,88 +1,86 @@
-import CSSMatrix from './CSSMatrix';
-
-let last = Array.prototype.last;
-Array.prototype.last = function() {
-  if(last) return last.apply(this);
-  return this[this.length-1];
-};
+import dom from './dom';
+import parseFrames from './methodParser';
+import TransformFrame from './TransformFrame';
 
 export default class EasyTransform {
   static instances = [];
 
   static run() {
     const els = document.querySelectorAll('[data-ezt]:not([data-ezt-enabled])');
-    Array.from(els).map(el => el._ezt = new EasyTransform(el));
+
+    Array.from(els)
+      .filter(el => !el._ezt).map(el => {
+        const frames = parseFrames(el.dataset.ezt);
+
+        el._ezt = new EasyTransform({
+          target: el,
+          repeat: el.dataset.eztRepeat,
+          duration: el.dataset.eztDuration,
+          alternate: 'eztAlternate' in el.dataset,
+          autoplay: 'eztAutoplay' in el.dataset,
+          frames,
+        });
+      });
   }
 
-  _mat = null;
   _dir = 1;
-  _loop = false;
   _offset = null;
+  _frame = 0;
+
+  get frame() { return this.frames[this._frame]; }
+  set frame(frame) { this._frame = frame; }
+
+  _repeat = 0;
   _delay = 0;
   _easing = 'linear';
-  _duration = '500ms';
+  _duration = 500;
 
-  constructor(el) {
-    this.playing = false;
+  constructor(opts) {
+    const {
+      target,
+      frames,
+      delay = 0,
+      repeat = 0,
+      alternate = true,
+      duration=1000,
+      autoplay = false
+    } = opts;
 
-    this.el = el;
+    this._frame = 0;
 
-    this._mat = new CSSMatrix();
-    this._offset = [el.offsetWidth/2, el.offsetHeight/2];
-    this._delay = el.hasAttribute('data-ezt-delay') && el.hasAttribute('data-ezt-delay');
-    this._loop = el.hasAttribute('data-ezt-loop');
-    this._alternate = el.hasAttribute('data-ezt-alternate');
+    this.el = target;
+    this.playing = autoplay;
 
-    this.easing(el.getAttribute('data-ezt-duration'));
-    this.duration(el.getAttribute('data-ezt-easing'));
+    this._delay = delay;
+    this._repeat = repeat;
+    this._alternate = alternate;
+    this._duration = duration;
 
-    this.frame = 0;
+    this._offset = [
+      target.offsetWidth/2,
+      target.offsetHeight/2
+    ];
+
     // first frame is the element as-styled
-    this.frames = [ () => this.reset(true) ];
+    // const transform = getComputedStyle(this.el, null).transform;
+    Object.keys(EasyTransform.prototype)
+      .forEach(prop => {
+        if(typeof this[prop] === 'function') {
+          this[prop] = this[prop].bind(this);
+        }
+      });
 
-    this.reset();
-
-    this.play = this.play.bind(this);
-    this.next = this.next.bind(this);
-    this.reset = this.reset.bind(this);
+    this.frames = [];
 
     this.el.addEventListener('transitionend', this.next);
     EasyTransform.instances.push(this);
 
-    if(el.dataset.ezt && el.dataset.ezt.length) {
-      // parse `data-ezt` argument for any defined frames
-      const frames = el.dataset.ezt.split('')
-        .reduce(({ active, frames }, char, i, arr) => {
-          switch(char) {
-            case '\n':
-            case '\r':
-            case '\r\n':
-            case ' ': break;
-            case ',': // Adding another argument if there's an active frame
-              if(frames.last()[active]) frames.last()[active].push('');
-              else frames.push({});
-            break;
-            case '(': // start accumulating args for this transform
-              Object.assign(frames.last(), { [active]: [''] });
-            break;
-            case ')': // stop accumulating args for this transform
-              active = '';
-            break;
-            default: // if `active` is in the current frame, accumulate arg value
-              if(frames.last()[active]) {
-                frames.last()[active][frames.last()[active].length - 1] += char;
-              }
-              else {
-                active += char;
-              }
-          }
-
-          return i === arr.length - 1 ? frames : { active, frames };
-        }, { active: '', frames: [ {} ] });
-
-      if(frames.length) frames.forEach(frame => this.transform(frame));
-      if(el.hasAttribute('data-ezt-autoplay')) this.start();
+    if(frames && frames.length) {
+      if(frames.length) frames.forEach(this.addFrame);
     }
+
+    this.transform = TransformFrame.zero();
+    if(this.playing) this.start();
   }
 
   start() {
@@ -91,17 +89,22 @@ export default class EasyTransform {
   }
 
   next() {
-    this.frame += this._dir;
-    const end = (this.frame < 0 || this.frame >= this.frames.length);
+    clearTimeout(this._timeout);
 
-    if(!this._loop && end) return;
+    if(this.frame.onComplete) this.frame.onComplete();
+
+    this._frame += this._dir;
+    const end = (this._frame < 0 || this._frame >= this.frames.length);
+
+    if(this._repeat < 0 && end) return;
 
     if(end && this._alternate) {
       this._dir *= -1;
-      this.frame += this._dir;
+      this._frame += this._dir; // + 1 * this._dir;
     }
     else if(end) {
-      return this.reset(true);
+      this._dir = 1;
+      this._frame = 0;
     }
 
     this.play();
@@ -112,47 +115,31 @@ export default class EasyTransform {
   }
 
   play() {
-    if(this.playing && this.frame >= 0 && this.frame < this.frames.length) {
-      const current = this._mat.toCSS();
-      const frame = this.frames[this.frame].call(this);
-
-      if(frame instanceof Promise) {
-        return frame.then(() => {
-          if(current === this._mat.toCSS()) return this.next();
-          this.el.style.transform = this._mat.toCSS();
-        });
-      }
-      else if(current !== this._mat.toCSS()) {
-        this.el.style.transform = this._mat.toCSS();
-      }
-      else {
-        this.next();
-      }
+    if(this.playing && this.frame) {
+      this.transform = this.frame.transition(this.el, this.transform);
+      this.el.innerText = this._frame;
+      this._timeout = setTimeout(this.next, (this.frame.delay + this.frame.duration) + 10);
     }
 
     return this;
   }
 
   addFrame(frame) {
-    this.frames.push(frame);
+    let lastFrame = this.frames[this.frames.length - 1];
+    this.frames.push(new TransformFrame(frame));
+    if(lastFrame) lastFrame._id = this.frames.length - 1;
     return this;
   }
 
   easing(easing) {
     if(!easing) return this;
     this._easing = easing;
-    this.el.style.transition = `transform ${this._duration} ${this._easing}`;
     return this;
   }
 
   duration(duration) {
     if(!duration) return this;
-
-    this._duration = typeof duration === 'number' ?
-      duration = `${duration}ms` :
-      duration;
-
-    this.el.style.transition = `transform ${this._duration} ${this._easing}`;
+    this._duration = duration;
     return this;
   }
 
@@ -161,23 +148,20 @@ export default class EasyTransform {
     return this;
   }
 
-  loop() {
-    this._loop = !this._loop;
+  loop(loop=!this._repeat) {
+    this._repeat = loop;
     return this;
   }
 
-  wait(t) {
-    return this.addFrame(() => {
-      return new Promise(resolve => setTimeout(resolve, t))
-    });
-  }
-
-  scale(x=1, y, z) {
-    return this.transform({ scale: [ x, y, z ] });
+  scale(x=1, y=x, z=y) {
+    this.addFrame({ transform: { scale: [x, y, z] } });
+    return this;
   }
 
   skew(x=0, y=0) {
-    return this.transform({ skew: [x, y] });
+    this.addFrame({ transform: { skew: [x, y] } });
+
+    return this;
   }
 
   translate(x=0, y=0, z=0, add=true) {
@@ -186,7 +170,9 @@ export default class EasyTransform {
       z = x = y = 0;
     }
 
-    return this.transform({ translate: [x, y, z, add] });
+    this.addFrame({ transform: { translate: [z, x, y] }, relative: add });
+
+    return this;
   }
 
   rotate(z=0, x=0, y=0, add=true) { // assuming z is default with one arg
@@ -195,61 +181,29 @@ export default class EasyTransform {
       z = x = y = 0;
     }
 
-    return this.transform({ rotate: [ z, x, y, add ] });
+    return this.addFrame({
+      transform: {
+        rotate: [ z, x, y ]
+      },
+      relative: add
+    });
   }
 
-  call(fn) {
-    this.addFrame(() => new Promise((resolve, reject) => {
-      try {
-        return resolve(fn.call(this))
-      }
-      catch(e) { return reject(e) };
-    }));
-
+  wait(t) {
+    this.frames[this.frames.length-1].delay = t;
+    // return this.addFrame(() => new Promise(resolve => setTimeout(resolve, t)));
     return this;
   }
 
-  reset(apply=false) {
-    const self = this;
-
-    this.frame = 0;
-    this._skew = [0, 0];
-    this._rotation = [0, 0, 0]; // z, x, y
-    this._translation = [0, 0, 0];
-
-    this._mat.reset();
-    if(apply) this.el.style.transform = this._mat.toCSS();
+  call(fn) {
+    this.frames[this.frames.length-1].onComplete = fn;
+    return this;
   }
 
-  transform(transforms) {
-    if(!Object.keys(transforms).length) return this;
-
-    return this.addFrame(() => {
-      Object.keys(transforms).forEach(prop => {
-        const transform = [].concat(transforms[prop]);
-
-        switch(prop) {
-          case "rotate":
-            let [ z=0, x=0, y=0, add=true ] = transform;
-            this._rotation = [ z, x, y ].map((a, i) => (add ? this._rotation[i] : 0) + a  * this._dir);
-            this._mat.rotate(...this._rotation.map(a => (a*Math.PI)/180));
-          break;
-          case "translate":
-            this._translation = transform.slice(0, 3).map((v, i, translation) => {
-              if(translation[3]) return this._translation[i] + this._offset[i] + v * this._dir;
-              return this._offset[i] + v * this._dir
-            });
-            this._mat.translate(...this._translation);
-          break;
-          case "skew":
-            this._skew = transform;
-            this._mat.skew(...transform.map(v => (v*Math.PI)/180 * this._dir));
-          default:
-            this._mat[prop] ?
-              this._mat[prop](...transform) :
-              this[prop](...transform);
-        }
-      });
+  transform(transform) {
+    return this.addFrame({
+      transform: Object.keys(transform)
+        .reduce((out, prop) => Object.assign(out, { [prop]: [].concat(transform[prop]) }), {})
     });
   }
 
